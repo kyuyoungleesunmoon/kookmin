@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 5
+names: ['blow hole', 'burr', 'crack', 'open hole', 'scratch']
+
+roboflow:
+  workspace: home-workspace
+  project: casting-defects-onf6n
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/home-workspace/casting-defects-onf6n/dataset/1
