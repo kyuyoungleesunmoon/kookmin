@@ -1,0 +1,67 @@
+================================================================================
+DOCUMENT TEXT CONTENT
+================================================================================
+[P1] A. Phase 1: Latent Diffusion 기반 퓨샷 생성 (Few-Shot Generation)
+[P2] 16장의 극소 데이터만으로 결함의 다양성을 확보하기 위해, 우리는 텍스트-이미지 생성 모델인 Stable Diffusion[19]을 산업용 X-ray 도메인에 특화시켰다. 단순한 이미지 합성이 아닌, X-ray 투과 특유의 반투명한 텍스처와 노이즈 패턴을 학습하기 위해 다음과 같은 고도화된 전략을 사용했다.
+[P3] Latent Diffusion Process (LDM): 기존의 픽셀 기반 확산 모델(Pixel-space Diffusion)은 고해상도 이미지 생성 시 막대한 연산량을 요구한다. 이를 극복하기 위해 LDM은 이미지를 저차원의 잠재 공간(Latent Space) 로 압축하여 확산 과정을 수행한다. LDM은 크게 전방 과정(Forward Process)과 역방향 과정(Reverse Process)으로 나뉜다. 전방 과정에서는 원본 잠재 벡터 에 점진적으로 가우시안 노이즈를 추가하여 시점 에서 완전한 등방성 노이즈 가 되도록 한다. 역방향 과정에서는 신경망 가 조건 (텍스트 프롬프트 등)를 받아 노이즈를 예측하고 제거한다. 최적화 목표(Objective Function)는 다음과 같다:
+[P5] 여기서 는 텍스트 인코더(CLIP)이며, 우리는 "A high-quality X-ray image of a DPF filter with [Category] defect"와 같은 프롬프트를 사용하여 생성 과정을 제어했다.
+[P6] Low-Rank Adaptation (LoRA): Stable Diffusion과 같은 거대 모델(Billions of parameters)을 16장의 데이터로 전면 미세 조정(Full Fine-tuning)하는 것은 심각한 과적합(Overfitting)과 재앙적 망각(Catastrophic Forgetting)을 초래한다. 이를 방지하기 위해 LoRA (Low-Rank Adaptation)[20] 기법을 적용했다. LoRA는 사전 학습된 가중치 행렬 를 고정한 상태에서, 변화량 를 두 개의 저랭크(Low-Rank) 행렬 와 의 곱으로 근사한다.
+[P8] 여기서 랭크 이다. 본 연구에서는 로 설정하여 학습 파라미터 수를 전체의 0.01% 수준으로 억제하면서도, DPF 결함의 핵심적인 시각적 특징(Edge, Texture)을 효과적으로 주입했다. 이를 통해 생성 모델은 소량의 데이터로도 결함의 물리적 특성을 충실히 반영하는 고품질 이미지를 생성할 수 있었다.
+[P9] B. Phase 2: 계층적 도메인 브리지 (Hierarchical Domain Bridge)
+[P10] 딥러닝 모델의 일반화 성능은 학습 데이터(Source Domain, )와 테스트 데이터(Target Domain, )의 분포가 일치할 때 보장된다. 그러나 자연 이미지(ImageNet)와 산업용 X-ray 이미지 사이에는 거대한 도메인 격차(Domain Gap)가 존재한다.
+[P11] Domain Gap Quantification: 도메인 간의 거리는 -divergence로 정의될 수 있다[9]. 자연 이미지 도메인을 , DPF 도메인을 라 할 때, 두 도메인 간의 거리가 멀면(), 전이 학습의 효율은 급격히 떨어진다('Negative Transfer').
+[P12] 우리는 이 문제를 해결하기 위해, 8,900장의 다양한 부품(나사, 파이프, 주조물 등) X-ray 이미지로 구성된 Industrial X-ray Zip Dataset을 중간 도메인(Bridge Domain, )으로 도입하는 3단계 계층적 전이학습(Three-Stage Hierarchical Transfer Learning)을 설계했다.
+[P13] Stage 1: General Feature Learning () ImageNet으로 사전 학습된 가중치 를 초기값으로 사용한다. 이 단계에서 모델은 객체의 기본적인 윤곽, 경계(Edge), 색상(Color) 등을 인지하는 능력을 갖춘다.
+[P14] Stage 2: Domain Adaptation via Bridge () 중간 도메인 데이터셋을 사용하여 모델을 튜닝한다. Zip Dataset은 DPF와 객체 종류는 다르지만, X-ray 투과 이미지의 명암 분포(Grayscale Intensity Distribution), 노이즈 패턴(Quantum Noise), 배경 텍스처(Background Texture) 등 저수준(Low-level) 특징을 공유한다.
+[P16] 이 과정을 통해 모델은 자연 이미지의 문법을 잊고, 산업용 X-ray 이미지의 통계적 특성에 적응하게 된다(Domain Alignment).
+[P17] Stage 3: Task-Specific Fine-tuning () 마지막으로 16장의 Real DPF 이미지와 500장의 Synthetic 이미지를 혼합하여 타겟 데이터를 학습한다. Stage 2에서 이미 X-ray 도메인에 적응된 모델은(Pre-aligned), 적은 수의 타겟 데이터만으로도 결함의 고유한 패턴(High-level Semantics)을 빠르고 안정적으로 학습할 수 있다. 이는 퓨샷 학습 환경에서 모델의 수렴 속도를 높이고 성능 변동성을 줄이는 결정적 요인이다.
+[P18] C. Phase 3: 불확실성 고려 탐지 (Uncertainty-Aware Detection)
+[P19] 생성된 합성 데이터는 실제 데이터와 미세한 분포 차이(Distribution Shift)를 가질 수 있으며, 이는 모델의 예측 신뢰도를 저하시키는 원인이 된다. 이를 보정하기 위해, YOLO11[8] 기반의 탐지 헤드를 불확실성(Uncertainty)을 추정할 수 있도록 개량했다.
+[P20] Gaussian Bounding Box Modeling: 일반적인 객체 탐지 모델은 바운딩 박스 좌표 를 단일 값(Deterministic Value)으로 예측한다. 그러나 라벨링 노이즈나 생성된 이미지의 경계 모호성을 반영하기 위해, 우리는 각 좌표를 가우시안 확률 분포 로 모델링한다. 예측된 박스 분포 와 실제 박스 분포  (디락 델타 함수) 간의 차이를 최소화하는 General Distribution Loss는 다음과 같이 정의된다.
+[P22] 이를 구체적으로 풀면, 모델이 신뢰할 수 없는 샘플(예: 생성된 아티팩트)에 대해서는 분산 를 키워 페널티를 줄이려는 경향을 보이게 된다. 이는 결과적으로 학습 과정에서 '어려운 샘플(Hard Samples)'에 대한 내성(Tolerance)을 부여한다.
+[P23] C2PSA (Cross-Stage Partial Self-Attention) with Linear Complexity: 미세 결함(Small Object)은 픽셀 수가 적어 컨볼루션 연산만으로는 특징이 소실되기 쉽다. 이를 보완하기 위해 전역적인 문맥(Global Context)을 파악하는 어텐션 모듈[30, 31]이 필수적이다. 우리는 YOLO11의 C3k2 Block에 C2PSA 모듈을 통합했다. 기존의 Self-Attention은 입력 길이 에 대해 의 연산 복잡도를 가져 고해상도 처리에 부적합했다. 이를 해결하기 위해 Linear Attention 메커니즘을 도입하여 복잡도를 으로 획기적으로 낮췄다.
+[P25] 여기서 는 커널 함수(Kernel Function)이다. 이 구조는 엣지 디바이스에서의 실시간 추론 속도(FPS)를 저하시키지 않으면서도, 배경 노이즈와 미세 균열을 구분하는 문맥 정보를 효과적으로 포착한다.
+[P26] Comprehensive Loss Function: 최종적으로 모델은 불확실성 손실뿐만 아니라, 클래스 불균형을 해결하기 위한 Sample-Weighted Classification Loss와 박스 정확도를 위한 CIoU Loss를 결합하여 학습된다.
+[P28] Sample-Weighted Loss (): 클래스 빈도의 역수를 가중치 로 적용하여, 빈도가 낮은 결함(Crack)에 더 큰 페널티를 부여한다.
+[P30] 이러한 복합적인 손실 함수 설계는 데이터의 양적 부족과 질적 불균형을 동시에 해결하는 핵심 기제이다.
+[P32] 실험 환경 및 설정 (Experimental Setup)
+[P33] A. 데이터셋 구축 및 전처리 (Dataset Construction)
+[P34] 본 연구의 실험은 총 세 가지 종류의 데이터셋을 유기적으로 결합하여 진행되었다.
+[P35] Industrial X-ray Zip Dataset (Bridge Domain): 도메인 적응을 위해 총 8,900장의 다양한 기계 부품(파이프, 나사, 실린더 등) X-ray 이미지를 구축했다. 이 데이터셋은 100~160kV의 관전압(Tube Voltage) 조건에서 촬영되었으며, DPF X-ray 영상과 유사한 그레이스케일 히스토그램 분포를 가진다.
+[P36] Few-Shot DPF Dataset (Target Domain):
+[P37] Real Data: 실제 제조 공정에서 수집된 16장의 결함 이미지. (Crack: 8장, Melting: 8장)
+[P38] Synthetic Data: Phase 1에서 생성된 500장의 가상 결함 이미지. 생성된 이미지는 전문가(Quality Engineer) 검수를 통해 물리적 정합성이 검증된 샘플만을 선별했다.
+[P39] Test Set: 모델의 객관적 성능 평가를 위해 학습에 전혀 사용되지 않은 실제 DPF 결함 이미지 30장을 별도로 확보했다. 이는 'Easy', 'Medium', 'Hard' 난이도로 분류되어 모델의 한계점을 테스트하는 데 사용되었다.
+[P40] B. 구현 세부 사항 (Implementation Details)
+[P41] 모든 실험은 PyTorch 2.1.0 프레임워크 상에서 수행되었으며, 하드웨어 환경은 NVIDIA RTX 3090 (24GB VRAM) GPU 4대를 활용한 분산 학습(DDP)으로 구성되었다.
+[P42] Input Resolution: 미세 결함 탐지를 위해 입력 해상도를  픽셀로 설정했다.
+[P43] Optimizer: AdamW[26] 최적화 함수를 사용했으며, 모멘텀 , 가중치 감쇠(Weight Decay)는 로 설정했다.
+[P44] Learning Rate Schedule: 초기 학습률은 웜업(Warmup) 기간(3 Epochs) 동안 0에서 까지 선형적으로 증가하며, 이후 코사인 어닐링(Cosine Annealing) 스케줄러를 따라 까지 감소한다.
+[P45] Table I. 학습 하이퍼파라미터 설정
+[P47] C. 평가 지표 (Evaluation Metrics)
+[P48] 모델의 성능은 객체 탐지 분야의 표준 지표인 Mean Average Precision (mAP)를 사용하여 평가했다.
+[P49] Precision & Recall:
+[P51] mAP50: IoU(Intersection over Union) 임계값이 0.5일 때의 AP(Average Precision) 평균값. 탐지의 '존재 여부'를 판단하는 데 적합하다.
+[P52] mAP50-95: IoU 0.5에서 0.95까지 0.05 단위로 AP를 평균 낸 값. 바운딩 박스의 '위치 정확도'를 엄밀하게 평가한다.
+[P54] 실험 결과 및 분석 (Experimental Results & Analysis)
+[P55] A. 전체 성능 비교 및 정량적 분석 (Overall Performance)
+[P56] 제안하는 GLAD 프레임워크의 유효성을 검증하기 위해 기존 SOTA 경량 모델인 YOLOv8s와 비교 실험을 수행했다. 최종 성능은 Table 1에 요약되어 있다.
+[P57] Table 1: YOLO11 vs YOLOv8 최종 성능 비교
+
+================================================================================
+TABLES
+================================================================================
+
+--- Table 0 ---
+파라미터 | Stage 1 (Bridge) | Stage 2 (Target Fine-tuning) | 비고
+Epochs | 50 | 100 | Sufficient convergence time
+Batch Size | 16 | 8 | GPU 메모리 및 배치 정규화 최적화
+Optimizer | AdamW[26] | AdamW | -
+Initial LR | 1e-3 | 1e-4 | Catastrophic Forgetting 방지
+Augmentation | Basic | Mosaic + Mixup (Off last 10) | 정밀 탐지 유도
+
+--- Table 1 ---
+모델 | mAP50 (%) | mAP50-95 (%) | Precision (%) | Recall (%) | F1 Score | Params (M)
+YOLOv8s | 62.3 | 45.2 | 71.8 | 68.5 | 0.701 | 11.1
+YOLO11s | 91.7 | 72.6 | 92.8 | 82.2 | 0.872 | 9.4
+절대 개선 | +29.4 | +27.4 | +21.0 | +13.7 | +0.171 | -1.7
